@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "forms",
-    "slug": "forms",
+    "name": "forms-pro",
+    "slug": "forms-pro",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "forms",
+    "scheme": "formspro",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
