@@ -13,32 +13,36 @@ export const QuickLinks = () => {
 
   const [loading, setLoading] = useState(false);
 
-  const handleCreateFrom = async () => {
+  const handleCreateForm = async () => {
     setLoading(true);
     if (!user) {
       router.replace("/");
       return;
     }
 
-    const form = await formsService.createEmpytForm(user.id);
+    const form = await formsService.createEmptyForm(user.id);
     if (!form) {
       Alert.alert("Error", "Erro");
       return;
     }
+    router.navigate({
+      pathname: "/forms/forms",
+      params: { formId: form.id },
+    });
+    setLoading(false);
   };
-
   return (
     <View style={{ gap: theme.spacing.sm }}>
       <Button
         title="Criar novo formulário"
         disabled={loading}
         loading={loading}
-        onPress={() => handleCreateFrom()}
+        onPress={() => handleCreateForm()}
       />
       <Button
         title="Todos os formulários"
         variant="outline"
-        onPress={() => {}}
+        onPress={() => router.navigate("/forms/list")}
       />
       <Button title="Ver perfil" variant="outline" onPress={() => {}} />
       <Button
