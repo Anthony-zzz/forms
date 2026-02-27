@@ -1,31 +1,39 @@
 import { Button } from "@/components/Button";
+import { FieldCard } from "@/components/home/EditField";
 import { Input } from "@/components/input";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { Switch } from "@/components/switch";
 import { Title } from "@/components/Title";
-import formsService from "@/services/forms-service";
+import confirm from "@/services/confirm";
+import formsService, { Field } from "@/services/forms-service";
 import { Theme, useTheme } from "@/themes/ThemeContext";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 
 export default function EditFormScreen() {
-  const { formId } = useLocalSearchParams();
-  const router = useRouter();
+  const params = useLocalSearchParams();
+  const formId = Array.isArray(params.formId)
+    ? params.formId[0]
+    : params.formId;
 
+  const router = useRouter();
   const { theme } = useTheme();
   const styles = createStyles(theme);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [isPublished, setIsPublished] = useState(false);
+  const [fields, setFields] = useState<Field[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const loadForm = async () => {
-      if (!formId || typeof formId !== "string") return;
+    if (!formId) return;
 
+    const loadForm = async () => {
       try {
+        setLoading(true);
+
         const data = await formsService.getFormById(formId);
 
         if (!data) {
@@ -37,6 +45,7 @@ export default function EditFormScreen() {
         setTitle(data.form.title ?? "");
         setDescription(data.form.description ?? "");
         setIsPublished(data.form.isPublished ?? false);
+        setFields(data.fields ?? []);
       } catch (error) {
         console.log(error);
         Alert.alert("Erro", "Falha ao carregar o formulário.");
@@ -49,10 +58,10 @@ export default function EditFormScreen() {
   }, [formId]);
 
   const saveForm = async () => {
-    if (typeof formId !== "string") return;
+    if (!formId) return;
 
-    if (loading) {
-      Alert.alert("Aguarde", "O formulário ainda está carregando.");
+    if (!title.trim()) {
+      Alert.alert("Validação", "O formulário precisa ter um título.");
       return;
     }
 
@@ -69,18 +78,74 @@ export default function EditFormScreen() {
       }
 
       Alert.alert("Sucesso", "Formulário salvo com sucesso!");
-      router.back(); // <<< ESSENCIAL
+      router.back();
     } catch (error) {
       console.log(error);
       Alert.alert("Erro", "Ocorreu um erro ao salvar o formulário.");
     }
   };
 
+  const deleteForm = async () => {
+    if (!formId) return;
+
+    confirm(
+      "Excluir Formulário",
+      "Excluir definitivamente o formulário?",
+      async () => {
+        const ok = await formsService.deleteForm(formId);
+
+        if (!ok) {
+          Alert.alert("Erro", "Não foi possível apagar o formulário");
+          return;
+        }
+
+        router.replace("/forms/list");
+      },
+    );
+  };
+
+  const addField = async () => {
+    if (!formId) return;
+
+    const nextOrder =
+      fields.length > 0 ? Math.max(...fields.map((f) => f.fieldOrder)) + 1 : 0;
+
+    const field = await formsService.addField(formId, nextOrder);
+    if (!field) return;
+
+    setFields((current) => [...current, field]);
+  };
+
+  const updateFieldsState = (fieldId: string, changes: Partial<Field>) => {
+    setFields((current) =>
+      current.map((f) => (f.id === fieldId ? { ...f, ...changes } : f)),
+    );
+  };
+
+  const saveField = async (fieldId: string, field: Field) => {
+    await formsService.updateField(fieldId, field);
+    Alert.alert("Campo salvo");
+  };
+
+  const removeField = async (fieldId: string) => {
+    await formsService.removeField(fieldId);
+    setFields((current) => current.filter((f) => f.id !== fieldId));
+  };
+
+  const previewForm = () => {
+    if (!formId) return;
+
+    router.push({
+      pathname: "/forms/form",
+      params: { formId },
+    });
+  };
+
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.content}>
         <Title>Editando formulário</Title>
-        <Text>{formId}</Text>
+        <Text>ID: {formId}</Text>
 
         <Input placeholder="Título" value={title} onChangeText={setTitle} />
 
@@ -105,13 +170,18 @@ export default function EditFormScreen() {
             title="Visualizar formulário"
             style={{ flex: 1 }}
             variant="outline"
-            onPress={() => {}}
+            onPress={() =>
+              router.push({
+                pathname: "/preview/[formId]",
+                params: { formId: String(formId) },
+              })
+            }
           />
           <Button
             title="Excluir formulário"
             style={{ flex: 1 }}
             variant="danger"
-            onPress={() => {}}
+            onPress={deleteForm}
           />
         </View>
 
@@ -120,9 +190,23 @@ export default function EditFormScreen() {
           <Button
             title="Adicionar campo"
             variant="outline"
-            onPress={() => {}}
+            onPress={addField}
           />
         </View>
+
+        {fields.map((field) => (
+          <FieldCard
+            key={field.id}
+            field={field}
+            onSaveField={saveField}
+            onStateChange={updateFieldsState}
+            onRemove={removeField}
+            onMoveUp={() => {}}
+            onMoveDown={() => {}}
+            isFirst={false}
+            isLast={false}
+          />
+        ))}
       </ScrollView>
     </ScreenContainer>
   );

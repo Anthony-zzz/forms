@@ -10,14 +10,28 @@ export type Form = {
   createdAt: string;
 };
 
+export type FieldKind =
+  | "short_text"
+  | "long_text"
+  | "single_option"
+  | "multiple_option";
+
 export type Field = {
   id: string;
-  kind: "short_text" | "long_text" | "single_option" | "multiple_option";
+  kind: FieldKind;
   label: string;
-  options?: string[];
+  options: string[];
   isRequired: boolean;
   fieldOrder: number;
   formId: string;
+};
+
+export type Response = {
+  id: string;
+  formId: string;
+  submittedAt: string;
+  answers: Record<string, string>;
+  metadata: Record<string, string>;
 };
 
 const formsService = {
@@ -131,6 +145,56 @@ const formsService = {
     };
   },
 
+  getHomeStats: async (userId: string) => {
+    // total de formulários
+    const { data: forms, error: formsError } = await supabase
+      .from("forms")
+      .select("id, title, created_at")
+      .eq("user_id", userId);
+
+    if (formsError || !forms) {
+      return {
+        totalForms: 0,
+        totalResponses: 0,
+        latestForm: null,
+      };
+    }
+
+    const formIds = forms.map((f) => f.id);
+
+    // total de respostas
+    const { count: responsesCount } = await supabase
+      .from("form_responses")
+      .select("id", { count: "exact", head: true })
+      .in("form_id", formIds);
+
+    // último formulário criado
+    const latest = forms.sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    )[0];
+
+    let latestForm = null;
+
+    if (latest) {
+      const { count } = await supabase
+        .from("form_responses")
+        .select("id", { count: "exact", head: true })
+        .eq("form_id", latest.id);
+
+      latestForm = {
+        title: latest.title,
+        responses: count ?? 0,
+      };
+    }
+
+    return {
+      totalForms: formIds.length,
+      totalResponses: responsesCount ?? 0,
+      latestForm,
+    };
+  },
+
   updateForm: async (formId: string, updates: Partial<Form>) => {
     const payload = {
       ...(updates.title !== undefined && { title: updates.title }),
@@ -234,7 +298,7 @@ const formsService = {
         form_id: formId,
         label: "Novo campo",
         kind: "short_text",
-        options: [],
+        options: [], // IMPORTANTE
         is_required: false,
         field_order: fieldOrder,
       })
@@ -293,6 +357,38 @@ const formsService = {
 
   removeField: async (fieldId: string) => {
     await supabase.from("form_fields").delete().eq("id", fieldId);
+  },
+
+  getFormResponses: async (formId: string): Promise<Response[]> => {
+    const { data, error } = await supabase
+      .from("form_responses")
+      .select(
+        `
+      id,
+      form_id,
+      submitted_at,
+      answers,
+      metadata
+    `,
+      )
+      .eq("form_id", formId)
+      .order("submitted_at", { ascending: false });
+
+    if (error || !data) {
+      console.log(error);
+      Alert.alert("Erro", "Erro ao carregar respostas.");
+      return [];
+    }
+
+    const responses: Response[] = data.map((r: any) => ({
+      id: r.id,
+      formId: r.form_id,
+      submittedAt: r.submitted_at,
+      answers: r.answers ?? {},
+      metadata: r.metadata ?? {},
+    }));
+
+    return responses;
   },
 };
 
